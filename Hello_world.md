@@ -6,34 +6,51 @@ output:
   html_document: 
     keep_md: true
 ---
-
-
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+This is my test to say "Hello world", and save it to github using a markdown .md file.
 
 
 ``` r
-summary(cars)
+# some code to run
+library(tidyverse)
 ```
 
 ```
-##      speed           dist       
-##  Min.   : 4.0   Min.   :  2.00  
-##  1st Qu.:12.0   1st Qu.: 26.00  
-##  Median :15.0   Median : 36.00  
-##  Mean   :15.4   Mean   : 42.98  
-##  3rd Qu.:19.0   3rd Qu.: 56.00  
-##  Max.   :25.0   Max.   :120.00
+## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+## ✔ dplyr     1.1.4     ✔ readr     2.1.5
+## ✔ forcats   1.0.0     ✔ stringr   1.5.1
+## ✔ ggplot2   3.5.1     ✔ tibble    3.2.1
+## ✔ lubridate 1.9.3     ✔ tidyr     1.3.1
+## ✔ purrr     1.0.2     
+## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+## ✖ dplyr::filter() masks stats::filter()
+## ✖ dplyr::lag()    masks stats::lag()
+## ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
 ```
 
-## Including Plots
+``` r
+data(starwars)
 
-You can also embed plots, for example:
+# make a cool figure:
+starwars %>%
+  rowwise() %>%
+  mutate(n_films = length(films)) %>%
+  mutate(more_1 = case_when(n_films == 1 ~ "Exactly one movie",
+                            n_films != 1 ~ "More than 1 movie")) %>%
+  mutate(human = case_when(species == "Human" ~ "Human",
+                           species != "Human" ~ "Non-human")) %>%
+  filter(gender %in% c("feminine", "masculine"), !is.na(human)) %>%
+  ggplot(aes(height, fill = gender)) +
+  facet_grid(human ~ more_1) +
+  ggtitle("Data-viz for nerds") +
+  xlab("height (cm)") +
+  geom_density(alpha = 0.4) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
 
-![](Hello_world_files/figure-html/pressure-1.png)<!-- -->
+```
+## Warning: Removed 6 rows containing non-finite outside the scale range
+## (`stat_density()`).
+```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+![](Hello_world_files/figure-html/unnamed-chunk-1-1.png)<!-- -->
+
