@@ -1,0 +1,266 @@
+---
+title: "Ordinal regression models"
+output:
+  html_document:
+    keep_md: true
+  pdf_document: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Learning outcomes
+
+Know how to [build cumulative link ordinal regression models](#clms)  
+Know how to [specify nominal effects in cumulative link models](#clmnom)  
+Know how to [visualise effects in ordinal regression](#clmvis)  
+
+
+## Libraries 
+In addition to the basic libraries automatically loaded with R, you may wish to use the following additional packages. If necessary, make sure you either have internet access on your machine or that you install these packages prior to the practical.  
+`{boot}`   
+`{sure}`  
+`{ordinal}`  
+`{reshape2}`  
+`{tidyverse}`  
+
+
+```{r libs, message = FALSE}
+library(ordinal)
+library(sure)
+library(reshape2)
+library(boot)
+library(webexercises)
+library(tidyverse)
+```
+
+
+## Ordinal regression
+<a name="clms"></a>
+
+
+As we explained in the lecture, ordinal regression is a special method that is not strictly in the generalised linear models family, but which shares some features with glims. Now that we are somewhat familiar with poisson and binomial models, let's try to run an ordinal regression. We'll use the sample data higlighted as the vignette in the [ordinal package for R](https://cran.r-project.org/package=ordinal), and note that the [published vignette for the package](https://cran.r-project.org/web/packages/ordinal/vignettes/clm_intro.pdf), upon which this material is based, also allows you to incorporate random effects which we'll ignore for today's session to keep things relatively simple (we'll save all discussions of random effects for the sessions on mixed models).
+
+If necessary, install the `{ordinal}` package, and load the library. The data are stored within the ordinal library in an object called `wine`. Call that object and have a look at it. You can also get more information on it using the help documentation to learn about the variables.
+
+```{r clmwine, eval = FALSE}
+wine
+?wine
+```
+
+When you're working with ordinal data, one of the key pieces of data management will be to ensure that your response variable (in this case, `rating`) is stored as an ordinal factor. This is true for the wine data by design. 
+
+```{r clmstr}
+# I prefer tibbles
+wine <- as_tibble(wine)
+
+str(wine$rating)
+# make sure factor is ordered
+levels(wine$rating)
+```
+
+If you were encoding your own data (e.g., Likert scale responses), you can coerce them to an ordered factor, or change the order of factors using the function ordered (here I have commented out the line because we don't actually want to change the order; this is just to explain how it would be done):
+
+
+```{r clmordered}
+# can change order with 
+# wine$rating<-ordered(wine$rating,
+                     # levels=c("5", "4", "3",
+                              # "2", "1"))
+
+```
+
+
+Examine a histogram of the continuous `response` variable, which was used to generate ratings. Are you confident that this represents a continuous and normal distribution? Why or why not?
+
+```{r clmhist, echo=FALSE}
+hist(wine$response)
+```
+
+Examine a bar chart for the ratings (you can use geom_bar for discrete variables), and assess its distribution and whether you think assuming this was a metric (continuous) variable would cause any problems.
+
+```{r clmplot1}
+wine %>% 
+  ggplot(aes(x = rating))+
+  geom_bar()
+
+```
+
+Now explore the effects of the two predictors on rating, using facetting in ggplot and geom_bar to see how the rating profile changes with both `temp` and `contact`. Note that in this arrangement, the response variable is the frequency (count) of observations of each rating, and the predictors are arranged across panels, so we're interested in assessing whether the distribution of ratings depends on panel.
+Can you predict the sign of the coefficients for each of the two predictors? Do you think the effect of one predictor depends on the other one (i.e., is there an interaction)?
+
+```{r clmplot2}
+
+wine %>% 
+  ggplot(aes(x = rating))+
+  geom_bar()+
+  facet_grid(temp ~ contact)
+
+```
+
+OK, let's build our first ordinal regression model using the `clm()` (for cumulative link model) function from the `{ordinal}` library. The formula syntax should be familiar by now. Include an interaction to start with, and we can test whether it is significant as we proceed.
+
+```{r clmbuild}
+bitter.mod1 <- clm(rating ~ temp * contact,
+                   data = wine)
+```
+
+We need another function, `autoplot.clm` from the `{sure}` package to make a diagnostic plot for our model. This function uses simulations to make a pseudo-qq plot. Because it is simulating, you might want to run it more than once to make sure that the apparent good or bad fit of your model is not the result of a single sampling error. Also, be a bit forgiving for the current dataset, which has a small sample size.
+
+```{r clmdiag}
+# diagnostics using the {sure} package
+autoplot.clm(bitter.mod1)
+```
+
+If you're satisfied about the fit, let's ask for a summary of the model.
+
+```{r clmsum}
+summary(bitter.mod1)
+
+```
+
+First examine the upper table of coefficients, and assess whether your intuitions about the main effects and interaction were correct. How did you do? Discuss any discrepancies with classmates or instructors. In the lecture, we will have explained the meaning of the second set of coefficients. Think about what the threshold coefficients mean, and see if you can intuit what the output is telling you about ratings. This is tricky, so don't be too hard on yourself if the meaning is elusive. We recommend the clm vignette, which contains a lot of information, but the reading of which will take time.
+
+The interaction seems not to be contributing, so I would argue it needs to be removed so we can better estimate the main effects. Can you remember how to use the `update()` and `anova()` functions to do this? Give it a go, and use the hint if necessary.
+
+
+```{r clmintlr}
+bitter.mod2<-update(bitter.mod1, ~ . - temp:contact)
+anova(bitter.mod2, bitter.mod1, test = "Chi")
+```
+
+
+You should be satisfied that the interaction is not needed. Examine the diagnostics for the simplified model, and its summary as well. Do you think further simplification is warranted?
+
+
+```{r clmdiag2}
+autoplot.clm(bitter.mod2)
+
+summary(bitter.mod2)
+```
+
+
+### Structured thresholds
+<a name="clmnom"></a>
+
+
+The model we built above assumes that the thresholds between rating levels are the same for all levels of the predictor variables. We can relax this assumption and fit so-called "nominal effects" for one of the predictors, and see if it improves the model using likelihood ratio tests, as follows. Have a look at the new model object, and notice the change in the number of coefficients. 
+
+```{r clmnomcontact}
+bitter.mod2.nom_con <- clm(rating ~ temp,
+                           nominal = ~ contact,
+                           data = wine)
+summary(bitter.mod2.nom_con)
+anova(bitter.mod2, bitter.mod2.nom_con, test="Chi")
+
+
+```
+
+Unfortunately, perhaps because of the small sample, we can't model the inverse object, in which `temp` is the nominal effect. The following model specification raises a warning that the model fails to converge, and the summary reveals that no parameters have been estimated. If this were your data, you would have to stage another wine tasting at least to explore whether temperature has a nominal effect!
+
+```{r clmnomtemp}
+bitter.mod2.nom_temp <- clm(rating ~ contact,
+                            nominal = ~ temp,
+                            data = wine)
+summary(bitter.mod2.nom_temp)
+
+```
+
+Because the likelihood ratio test for the one nominal model we can run is NS, we can be satisfied that our model meets the "proportional odds" assumption, and is minimal-adequate. 
+
+The ordinal vignette and the internet both suggest that likelihood ratio tests provide more accurate p-values than the Wald tests provided by default. We consequently recommend a series of simplification steps to generate p-values.
+
+```{r clmLRtests}
+bitter.modtemptest <- update(bitter.mod2, 
+                             ~ . - temp)
+anova(bitter.mod2, bitter.modtemptest, test = "Chi")
+
+bitter.modcontacttest <- update(bitter.mod2,
+                                ~ . - contact)
+anova(bitter.mod2, bitter.modcontacttest, 
+      test = "Chi")
+```
+
+
+### Visualising ordinal regression models
+<a name="clmvis"></a>
+
+
+OK, to properly make sense of our model, lets generate and plot predictions, using the infamous `predict()` function. First, generate a new dataframe containing all possible levels of temp and contact, e.g., using the `crossing()` function:
+
+```{r clmnewdata}
+newwine <- crossing(temp = c("warm", "cold"),
+                    contact = c("no", "yes"))
+
+```
+
+We'll pass the model, the new data, and two extra arguments (one specifying that we want confidence limits as well as fits, and the other asking for predicted values as probabilities, to save us the trouble of back-transformation) to `predict()`. Examine the saved predictions object once you have created it.
+
+```{r clmpreds}
+wine_preds <- predict(bitter.mod2,
+                      newdata=newwine,
+                      interval=TRUE, 
+                      type="prob")
+wine_preds
+```
+
+The prediction object contains a lot of useful information in an inconvenient form: it's a 3D matrix, with the "rows" 1-4 representing the unique combinations of `temp` and `contact`, the "columns" 1-5 representing the rating categories, and the contents themselves representing the predicted probabilities. We'll need to reshape these data to plot them. If you're feeling brave, have a crack at this yourself. If you're tired (it's late Thursday, and we've learned a lot this week, so you're entitled!), just cheat by looking at my code below:
+
+
+```{r clmpredsreshape}
+
+
+# Alternative coding 2023
+wine_preds_long<- wine_preds %>% 
+  melt(.) %>% 
+  rename(Rating = Var2,
+         PredComb = Var1) %>% 
+  pivot_wider(names_from = L1,
+              values_from = value)
+
+newwine <- newwine %>% 
+  mutate(PredComb = 1:4)
+
+df_new_wine_preds <- left_join(wine_preds_long, newwine)
+
+```
+
+
+Finally, we're in a position to plot things. As usual, I suggest plotting both data and predictions. Since the predictions are probabilities, we need to convert the data to proportions so they are comparable. The `geom_bar()` function below is modified to present proportions, and each of these is multiplied by four so that it represents the proportion within each of the four combinations of temp and contact. A bit of a fudge, but it works!
+  
+```{r clmplotfinal}
+
+# get proportions in raw data
+wine_sum <- wine %>% 
+  group_by(temp, contact, rating) %>% 
+  summarise(count = n()) %>% 
+  mutate(prop = count /sum(count)) %>% 
+  mutate(rating = as.double(rating))
+
+# make a plot
+df_new_wine_preds %>% 
+  ggplot(aes(x = Rating, y = fit)) +
+  geom_bar(data = wine_sum,
+           aes(x = rating,
+               y =  prop),
+           stat = "identity") +
+  geom_pointrange(aes(ymin = lwr,
+                      ymax = upr)) +
+  facet_wrap(temp ~ contact) +
+  labs(x = "Rating",
+       y = "Probability")
+
+
+
+
+```
+
+Note that this visualisation has raw data as bars, and the cells and error bars represent model fits (this will be worth explaining at length to readers, since it is somewhat non-intuitive).
+
+CLMs are sufficiently complicated that I didn't feel like I understood this one until the predictions were properly plotted. Spend some time studying your plot, and comparing it to the table of coefficients. Feel free to exponentiate the coefficients (which are in log units) so that you can relate them to your figure. Finally, discuss with your classmates and instructors the costs and benefits of ordinal regression relative to simpler methods that might be easier for your audience to interpret.
+  
+
+
